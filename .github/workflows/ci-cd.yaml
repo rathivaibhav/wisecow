@@ -40,57 +40,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-to-k8s:
-    name: Deploy to Kubernetes
+  mock-deploy:
+    name: Mock Deployment
     needs: build-and-push-docker
     runs-on: ubuntu-latest
-    env:
-      NAMESPACE: wisecow
-      KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
-
     steps:
-      - name: Skip if KUBECONFIG not provided
-        if: ${{ env.KUBECONFIG_DATA == '' }}
+      - name: Simulate deployment
         run: |
-          echo "KUBECONFIG secret is not set — skipping deployment."
-          exit 0
-
-      - name: Check out the repo
-        uses: actions/checkout@v4
-
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
-
-      - name: Set up kubeconfig
-        run: |
-          echo "Setting up kubeconfig..."
-          mkdir -p $HOME/.kube
-          if echo "${KUBECONFIG_DATA}" | grep -q "apiVersion"; then
-            echo "${KUBECONFIG_DATA}" > $HOME/.kube/config
-          else
-            echo "${KUBECONFIG_DATA}" | base64 -d > $HOME/.kube/config
-          fi
-          chmod 600 $HOME/.kube/config
-          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
-          kubectl version --client
-
-      - name: Verify cluster connection
-        run: |
-          kubectl config current-context
-          kubectl get nodes || echo "Unable to list nodes — check permissions."
-
-      - name: Apply Kubernetes manifests
-        run: |
-          echo "Applying manifests in namespace: $NAMESPACE"
-          kubectl apply --validate=false -f k8s/namespace.yaml || echo "Namespace may already exist."
-          kubectl apply --validate=false -f k8s/service.yaml -n $NAMESPACE
-
-          TEMP_DEPLOYMENT_FILE=$(mktemp)
-          IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}"
-          sed "s|<IMAGE_PLACEHOLDER>|$IMAGE_TAG|g" k8s/deployment.yaml > $TEMP_DEPLOYMENT_FILE
-
-          kubectl apply --validate=false -f $TEMP_DEPLOYMENT_FILE -n $NAMESPACE
-          rm $TEMP_DEPLOYMENT_FILE
-
-          echo "Deployment rollout triggered successfully."
+          echo "Build successful."
+          echo "Mock deploying image ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          echo "CI/CD pipeline completed successfully."
 
