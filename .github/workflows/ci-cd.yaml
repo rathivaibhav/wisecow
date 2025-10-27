@@ -47,31 +47,35 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NAMESPACE: wisecow
+      KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      - name: Skip deployment if KUBECONFIG secret missing
-        if: ${{ !secrets.KUBECONFIG }}
-        run: |
-          echo "KUBECONFIG secret not found. Skipping deployment."
-          exit 0
-
       - name: Set up Kubeconfig
-        if: ${{ secrets.KUBECONFIG }}
         run: |
-          echo "${{ secrets.KUBECONFIG }}" > kubeconfig.yaml
+          if [ -z "${KUBECONFIG_DATA}" ]; then
+            echo "⚠️  No KUBECONFIG secret found. Skipping deployment."
+            exit 0
+          fi
+
+          echo "$KUBECONFIG_DATA" > kubeconfig.yaml
           export KUBECONFIG="$PWD/kubeconfig.yaml"
-          echo "Using kubeconfig:"
+
+          echo "✅ Kubeconfig file created."
+          echo "Cluster info:"
           kubectl config view --minify || true
 
       - name: Install and set up kubectl
-        if: ${{ secrets.KUBECONFIG }}
         uses: azure/setup-kubectl@v4
 
       - name: Apply Kubernetes manifests
-        if: ${{ secrets.KUBECONFIG }}
         run: |
+          if [ -z "${KUBECONFIG_DATA}" ]; then
+            echo "⚠️  Skipping deployment because KUBECONFIG is missing."
+            exit 0
+          fi
+
           kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/service.yaml -n $NAMESPACE
 
@@ -81,4 +85,5 @@ jobs:
 
           kubectl apply -f $TEMP_DEPLOYMENT_FILE -n $NAMESPACE
           rm $TEMP_DEPLOYMENT_FILE
-          echo "Deployment rollout triggered."
+
+          echo "🚀 Deployment rollout triggered."
