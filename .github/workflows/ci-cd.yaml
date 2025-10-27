@@ -1,7 +1,7 @@
---- # Added document start
-# GitHub Actions Workflow for CI/CD
+---
 name: ci-cd
 
+# Trigger this workflow on every push to 'main' or manually
 on:
   push:
     branches:
@@ -45,45 +45,45 @@ jobs:
     name: Deploy to Kubernetes
     needs: build-and-push-docker
     runs-on: ubuntu-latest
+    if: ${{ secrets.KUBECONFIG }}
     env:
       NAMESPACE: wisecow
-      KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
 
       - name: Set up Kubeconfig
         run: |
-          if [ -z "${KUBECONFIG_DATA}" ]; then
-            echo "⚠️  No KUBECONFIG secret found. Skipping deployment."
-            exit 0
-          fi
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig.yaml
+          export KUBECONFIG=$PWD/kubeconfig.yaml
+          echo "✅ KUBECONFIG loaded successfully."
+          kubectl version --client
 
-          echo "$KUBECONFIG_DATA" > kubeconfig.yaml
-          export KUBECONFIG="$PWD/kubeconfig.yaml"
-
-          echo "✅ Kubeconfig file created."
-          echo "Cluster info:"
-          kubectl config view --minify || true
-
-      - name: Install and set up kubectl
+      - name: Install kubectl
         uses: azure/setup-kubectl@v4
+
+      - name: Verify cluster connection
+        run: |
+          echo "Checking cluster access..."
+          kubectl config get-contexts
+          kubectl get nodes || echo "⚠️ Unable to list nodes — check permissions."
 
       - name: Apply Kubernetes manifests
         run: |
-          if [ -z "${KUBECONFIG_DATA}" ]; then
-            echo "⚠️  Skipping deployment because KUBECONFIG is missing."
-            exit 0
-          fi
+          echo "Applying manifests in namespace: $NAMESPACE"
+          kubectl apply -f k8s/namespace.yaml || echo "Namespace may already exist."
 
-          kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/service.yaml -n $NAMESPACE
 
           TEMP_DEPLOYMENT_FILE=$(mktemp)
           IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}"
+
+          echo "Deploying with image: $IMAGE_TAG"
           sed "s|<IMAGE_PLACEHOLDER>|$IMAGE_TAG|g" k8s/deployment.yaml > $TEMP_DEPLOYMENT_FILE
 
+          echo "Applying deployment..."
           kubectl apply -f $TEMP_DEPLOYMENT_FILE -n $NAMESPACE
           rm $TEMP_DEPLOYMENT_FILE
 
-          echo "🚀 Deployment rollout triggered."
+          echo "✅ Deployment rollout triggered successfully."
