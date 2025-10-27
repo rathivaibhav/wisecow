@@ -43,54 +43,42 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-to-k8s:
+    deploy-to-k8s:
     name: Deploy to Kubernetes
     needs: build-and-push-docker
     runs-on: ubuntu-latest
-    # This job only runs if the KUBECONFIG secret is set
-    if: ${{ secrets.KUBECONFIG && secrets.KUBECONFIG != '' }}
     env:
       NAMESPACE: wisecow
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
 
+      - name: Skip deployment if KUBECONFIG secret missing
+        if: ${{ !secrets.KUBECONFIG }}
+        run: |
+          echo "KUBECONFIG secret not found. Skipping deployment."
+          exit 0
+
       - name: Set up Kubeconfig
+        if: ${{ secrets.KUBECONFIG }}
         run: |
           echo "${{ secrets.KUBECONFIG }}" > kubeconfig.yaml
-          export KUBECONFIG=kubeconfig.yaml
+          export KUBECONFIG="$PWD/kubeconfig.yaml"
+          # Print the current K8s context (sanity check)
+          kubectl config view --minify
 
       - name: Install and set up kubectl
+        if: ${{ secrets.KUBECONFIG }}
         uses: azure/setup-kubectl@v4
-        id: install
 
       - name: Apply Kubernetes manifests
+        if: ${{ secrets.KUBECONFIG }}
         run: |
-          # Apply the namespace first
           kubectl apply -f k8s/namespace.yaml
-
-          # Apply other resources into the namespace
           kubectl apply -f k8s/service.yaml -n $NAMESPACE
-
-          # Create a temporary deployment file for this specific 
-          # This replaces the placeholder with the exact image tag
           TEMP_DEPLOYMENT_FILE=$(mktemp)
-          IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}" # Ignored line length
-
-          echo "---"
-          echo "Deploying with image: $IMAGE_TAG"
-          echo "---"
-
+          IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}"
           sed "s|<IMAGE_PLACEHOLDER>|$IMAGE_TAG|g" k8s/deployment.yaml > $TEMP_DEPLOYMENT_FILE
-
-          echo "Applying new deployment config:"
-          cat $TEMP_DEPLOYMENT_FILE
-          echo "---"
-
-          # Apply the new deployment configuration
           kubectl apply -f $TEMP_DEPLOYMENT_FILE -n $NAMESPACE
-
-          # Clean up temp file
           rm $TEMP_DEPLOYMENT_FILE
-
           echo "Deployment rollout triggered."
