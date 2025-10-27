@@ -46,8 +46,7 @@ jobs:
   deploy-to-k8s:
     name: Deploy to Kubernetes
     needs: build-and-push-docker
-    runs-on: ubuntu-latest
-    
+    runs-on: ubuntu-latest 
     # This only runs if the KUBECONFIG secret is set
     if: ${{ secrets.KUBECONFIG != '' }}
     
