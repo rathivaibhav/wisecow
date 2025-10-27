@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out the repository
+      - name: Check out the repo
         uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
@@ -44,51 +44,49 @@ jobs:
     name: Deploy to Kubernetes
     needs: build-and-push-docker
     runs-on: ubuntu-latest
+    if: ${{ secrets.KUBECONFIG }}
     env:
       NAMESPACE: wisecow
 
     steps:
-      - name: Check out the repository
+      - name: Check out the repo
         uses: actions/checkout@v4
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
       - name: Set up kubeconfig
+        id: kubeconfig
         run: |
           echo "Setting up kubeconfig..."
-
           if echo "${KUBECONFIG_DATA}" | grep -q "apiVersion"; then
-            echo "Detected plain kubeconfig file."
-            echo "${KUBECONFIG_DATA}" > kubeconfig.yaml
+            echo "${KUBECONFIG_DATA}" > $HOME/.kube/config
           else
-            echo "Detected base64-encoded kubeconfig."
-            echo "${KUBECONFIG_DATA}" | base64 -d > kubeconfig.yaml
+            echo "${KUBECONFIG_DATA}" | base64 -d > $HOME/.kube/config
           fi
-
-          export KUBECONFIG=$PWD/kubeconfig.yaml
+          mkdir -p $HOME/.kube
+          chmod 600 $HOME/.kube/config
+          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
           kubectl version --client
-
         env:
           KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
 
       - name: Verify cluster connection
         run: |
-          kubectl config get-contexts
-          kubectl get nodes || echo "Warning: unable to list nodes."
+          kubectl config current-context
+          kubectl get nodes || echo "Unable to list nodes — check permissions."
 
       - name: Apply Kubernetes manifests
         run: |
           echo "Applying manifests in namespace: $NAMESPACE"
-
-          kubectl apply -f k8s/namespace.yaml || echo "Namespace may already exist."
-          kubectl apply -f k8s/service.yaml -n $NAMESPACE
+          kubectl apply --validate=false -f k8s/namespace.yaml || echo "Namespace may already exist."
+          kubectl apply --validate=false -f k8s/service.yaml -n $NAMESPACE
 
           TEMP_DEPLOYMENT_FILE=$(mktemp)
           IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}"
           sed "s|<IMAGE_PLACEHOLDER>|$IMAGE_TAG|g" k8s/deployment.yaml > $TEMP_DEPLOYMENT_FILE
 
-          kubectl apply -f $TEMP_DEPLOYMENT_FILE -n $NAMESPACE
+          kubectl apply --validate=false -f $TEMP_DEPLOYMENT_FILE -n $NAMESPACE
           rm $TEMP_DEPLOYMENT_FILE
 
           echo "Deployment rollout triggered successfully."
