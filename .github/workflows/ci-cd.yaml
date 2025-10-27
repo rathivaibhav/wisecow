@@ -1,7 +1,5 @@
----
-name: ci-cd
+name: CI/CD Pipeline
 
-# Trigger this workflow on every push to 'main' or manually
 on:
   push:
     branches:
@@ -17,7 +15,7 @@ jobs:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the repo
+      - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
@@ -30,7 +28,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
+      - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -45,45 +43,42 @@ jobs:
     name: Deploy to Kubernetes
     needs: build-and-push-docker
     runs-on: ubuntu-latest
-    if: ${{ secrets.KUBECONFIG }}
     env:
       NAMESPACE: wisecow
-
+      KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
     steps:
-      - name: Check out the repo
-        uses: actions/checkout@v4
-
-      - name: Set up Kubeconfig
+      - name: Validate KUBECONFIG
         run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig.yaml
-          export KUBECONFIG=$PWD/kubeconfig.yaml
-          echo "✅ KUBECONFIG loaded successfully."
-          kubectl version --client
+          if [ -z "${KUBECONFIG_DATA}" ]; then
+            echo "Error: KUBECONFIG secret is not set. Add it under Settings → Secrets → Actions → KUBECONFIG."
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Verify cluster connection
+      - name: Configure kubectl
         run: |
-          echo "Checking cluster access..."
+          echo "${KUBECONFIG_DATA}" | base64 -d > kubeconfig.yaml
+          export KUBECONFIG=$PWD/kubeconfig.yaml
+          kubectl version --client
+
+      - name: Verify Kubernetes Access
+        run: |
           kubectl config get-contexts
-          kubectl get nodes || echo "⚠️ Unable to list nodes — check permissions."
+          kubectl get nodes || echo "Warning: Unable to list nodes. Check cluster access."
 
-      - name: Apply Kubernetes manifests
+      - name: Apply Kubernetes Manifests
         run: |
-          echo "Applying manifests in namespace: $NAMESPACE"
           kubectl apply -f k8s/namespace.yaml || echo "Namespace may already exist."
-
           kubectl apply -f k8s/service.yaml -n $NAMESPACE
 
-          TEMP_DEPLOYMENT_FILE=$(mktemp)
           IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          sed "s|<IMAGE_PLACEHOLDER>|$IMAGE_TAG|g" k8s/deployment.yaml > deployment-temp.yaml
 
-          echo "Deploying with image: $IMAGE_TAG"
-          sed "s|<IMAGE_PLACEHOLDER>|$IMAGE_TAG|g" k8s/deployment.yaml > $TEMP_DEPLOYMENT_FILE
-
-          echo "Applying deployment..."
-          kubectl apply -f $TEMP_DEPLOYMENT_FILE -n $NAMESPACE
-          rm $TEMP_DEPLOYMENT_FILE
-
-          echo "✅ Deployment rollout triggered successfully."
+          kubectl apply -f deployment-temp.yaml -n $NAMESPACE
+          kubectl rollout status deployment/wisecow-deployment -n $NAMESPACE
+          rm deployment-temp.yaml
