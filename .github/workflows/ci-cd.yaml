@@ -49,9 +49,9 @@ jobs:
     needs: build-and-push-docker
     runs-on: ubuntu-latest
     # This job only runs if the KUBECONFIG secret is set
-    if: ${{ secrets.KUBECONFIG != '' }}
+    if: ${{ secrets.KUBECONFIG && secrets.KUBECONFIG != '' }}
     env:
-      NAMESPACE: wisecow  # Fixed comment spacing
+      NAMESPACE: wisecow
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
@@ -73,7 +73,7 @@ jobs:
           # Apply other resources into the namespace
           kubectl apply -f k8s/service.yaml -n $NAMESPACE
 
-          # Create a temporary deployment file for this specific SHA
+          # Create a temporary deployment file for this specific 
           # This replaces the placeholder with the exact image tag
           TEMP_DEPLOYMENT_FILE=$(mktemp)
           IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}" # Ignored line length
