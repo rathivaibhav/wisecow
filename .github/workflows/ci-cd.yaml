@@ -1,3 +1,4 @@
+--- # Added document start
 # GitHub Actions Workflow for CI/CD
 name: ci-cd
 
@@ -27,7 +28,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }} # Auto-generated
+          password: ${{ secrets.GITHUB_TOKEN }}  # Fixed comment spacing
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -50,7 +51,7 @@ jobs:
     # This job only runs if the KUBECONFIG secret is set
     if: ${{ secrets.KUBECONFIG != '' }}
     env:
-      NAMESPACE: wisecow # Define namespace as an env variable
+      NAMESPACE: wisecow  # Fixed comment spacing
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
@@ -75,7 +76,7 @@ jobs:
           # Create a temporary deployment file for this specific SHA
           # This replaces the placeholder with the exact image tag
           TEMP_DEPLOYMENT_FILE=$(mktemp)
-          IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}" # Ignored line length
 
           echo "---"
           echo "Deploying with image: $IMAGE_TAG"
