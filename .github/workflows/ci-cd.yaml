@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: ci-cd
 
 on:
   push:
@@ -14,8 +14,9 @@ jobs:
   build-and-push-docker:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check out repository
+      - name: Check out the repo
         uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
@@ -28,7 +29,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and Push Docker Image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -43,42 +44,53 @@ jobs:
     name: Deploy to Kubernetes
     needs: build-and-push-docker
     runs-on: ubuntu-latest
+    if: ${{ secrets.KUBECONFIG }}
     env:
       NAMESPACE: wisecow
-      KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
-    steps:
-      - name: Validate KUBECONFIG
-        run: |
-          if [ -z "${KUBECONFIG_DATA}" ]; then
-            echo "Error: KUBECONFIG secret is not set. Add it under Settings → Secrets → Actions → KUBECONFIG."
-            exit 1
-          fi
 
-      - name: Check out repository
+    steps:
+      - name: Check out the repo
         uses: actions/checkout@v4
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Configure kubectl
+      - name: Set up kubeconfig
         run: |
-          echo "${KUBECONFIG_DATA}" | base64 -d > kubeconfig.yaml
+          echo "Setting up kubeconfig..."
+
+          # Detect whether secret is base64 or plain YAML
+          if echo "${KUBECONFIG_DATA}" | grep -q "apiVersion"; then
+            echo "Detected plain kubeconfig."
+            echo "${KUBECONFIG_DATA}" > kubeconfig.yaml
+          else
+            echo "Detected base64-encoded kubeconfig."
+            echo "${KUBECONFIG_DATA}" | base64 -d > kubeconfig.yaml
+          fi
+
           export KUBECONFIG=$PWD/kubeconfig.yaml
           kubectl version --client
 
-      - name: Verify Kubernetes Access
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+
+      - name: Verify cluster connection
         run: |
           kubectl config get-contexts
-          kubectl get nodes || echo "Warning: Unable to list nodes. Check cluster access."
+          kubectl get nodes || echo "Unable to list nodes — check permissions."
 
-      - name: Apply Kubernetes Manifests
+      - name: Apply Kubernetes manifests
         run: |
+          echo "Applying manifests in namespace: $NAMESPACE"
+
           kubectl apply -f k8s/namespace.yaml || echo "Namespace may already exist."
           kubectl apply -f k8s/service.yaml -n $NAMESPACE
 
+          TEMP_DEPLOYMENT_FILE=$(mktemp)
           IMAGE_TAG="ghcr.io/${{ github.repository }}:${{ github.sha }}"
-          sed "s|<IMAGE_PLACEHOLDER>|$IMAGE_TAG|g" k8s/deployment.yaml > deployment-temp.yaml
+          sed "s|<IMAGE_PLACEHOLDER>|$IMAGE_TAG|g" k8s/deployment.yaml > $TEMP_DEPLOYMENT_FILE
 
-          kubectl apply -f deployment-temp.yaml -n $NAMESPACE
-          kubectl rollout status deployment/wisecow-deployment -n $NAMESPACE
-          rm deployment-temp.yaml
+          kubectl apply -f $TEMP_DEPLOYMENT_FILE -n $NAMESPACE
+          rm $TEMP_DEPLOYMENT_FILE
+
+          echo "Deployment rollout triggered successfully."
