@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out the repo
+      - name: Check out the repository
         uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
@@ -44,12 +44,11 @@ jobs:
     name: Deploy to Kubernetes
     needs: build-and-push-docker
     runs-on: ubuntu-latest
-    if: ${{ secrets.KUBECONFIG }}
     env:
       NAMESPACE: wisecow
 
     steps:
-      - name: Check out the repo
+      - name: Check out the repository
         uses: actions/checkout@v4
 
       - name: Install kubectl
@@ -59,9 +58,8 @@ jobs:
         run: |
           echo "Setting up kubeconfig..."
 
-          # Detect whether secret is base64 or plain YAML
           if echo "${KUBECONFIG_DATA}" | grep -q "apiVersion"; then
-            echo "Detected plain kubeconfig."
+            echo "Detected plain kubeconfig file."
             echo "${KUBECONFIG_DATA}" > kubeconfig.yaml
           else
             echo "Detected base64-encoded kubeconfig."
@@ -77,7 +75,7 @@ jobs:
       - name: Verify cluster connection
         run: |
           kubectl config get-contexts
-          kubectl get nodes || echo "Unable to list nodes — check permissions."
+          kubectl get nodes || echo "Warning: unable to list nodes."
 
       - name: Apply Kubernetes manifests
         run: |
@@ -94,3 +92,4 @@ jobs:
           rm $TEMP_DEPLOYMENT_FILE
 
           echo "Deployment rollout triggered successfully."
+
