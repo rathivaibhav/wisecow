@@ -1,0 +1,8 @@
+#Files to be ignored
+.git
+.github
+k8s
+kubearmor
+README.md
+*.md
+Dockerfile

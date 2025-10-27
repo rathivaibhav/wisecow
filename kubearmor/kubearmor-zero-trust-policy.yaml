@@ -1,0 +1,35 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: wisecow-zero-trust-policy
+  namespace: wisecow
+spec:
+  severity: 5
+  selector:
+    matchLabels:
+      app: wisecow
+  message: "Zero-trust policy violation: an un-allowed action was audited."
+  tags:
+    - zero-trust
+  process:
+    matchPaths:
+    - path: /bin/bash
+    - path: /usr/local/bin/wisecow.sh
+    - path: /bin/rm
+    - path: /usr/bin/mkfifo
+    - path: /bin/cat
+    - path: /bin/nc
+    - path: /bin/sleep
+    - path: /usr/games/fortune
+    - path: /usr/games/cowsay
+    action: Allow
+  file:
+    matchPaths:
+    - path: /tmp/response
+      readOnly: false
+    action: Allow
+  capabilities:
+    matchCapabilities:
+    - capability: net_bind_service
+    action: Allow
+  action: Audit
