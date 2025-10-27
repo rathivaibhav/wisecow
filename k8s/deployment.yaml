@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: wisecow
-        image: wisecow:local
+        image: <IMAGE_PLACEHOLDER>
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 4499
@@ -28,3 +28,4 @@ spec:
           limits:
             memory: "64Mi"
             cpu: "100m"
+
